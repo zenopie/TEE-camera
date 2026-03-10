@@ -1,0 +1,15 @@
+[package]
+name = "tee-camera-host"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "host"
+path = "src/main.rs"
+
+[build-dependencies]
+cc = "1"
+
+[profile.release]
+opt-level = 2
+strip = true
