@@ -1,0 +1,14 @@
+services:
+  # Demo - generate and verify signed frames (~8MB image)
+  demo:
+    build: .
+    volumes:
+      - ./output:/work/output
+
+  # Full Keystone TEE build (takes ~15 min, ~500MB image)
+  keystone:
+    build:
+      context: .
+      dockerfile: Dockerfile.full
+    volumes:
+      - ./output:/work/output

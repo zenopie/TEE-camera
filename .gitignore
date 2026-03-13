@@ -1,0 +1,37 @@
+# Build outputs
+output/
+build/
+*.o
+*.a
+*.so
+*.elf
+*.bin
+
+# Keystone build (if built locally)
+keystone/
+
+# Rust
+host/target/
+host/Cargo.lock
+
+# Tools binaries
+tools/verify_frames
+tools/generate_test_frames
+tools/test_crypto
+
+# LiteX/Migen
+litex/build/
+__pycache__/
+*.pyc
+
+# Editor
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

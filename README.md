@@ -1,11 +1,61 @@
-# TEE-camera: Trusted Camera Attestation
+# TEE-camera: Trusted Camera Attestation on Open Hardware
 
-Pre-hardware software stack for a trusted camera system using:
-- **Keystone** (RISC-V TEE) for frame signing in a hardware enclave
-- **iCESugar Pro** (iCE40UP5K FPGA) as the open hardware platform
-- **LiteX + VexRiscv** for the SoC, simulated with `litex_sim` before hardware
+Cryptographic frame signing inside a RISC-V hardware enclave.
 
-Reference: https://forum.scrt.network/t/trusted-camera-attestation-on-open-hardware-a-pathway-to-production-ready-open-tees/7960
+- **Keystone TEE** for isolated execution (Security Monitor + Eyrie runtime)
+- **Ed25519 signatures** via [compact25519](https://github.com/DavyLandman/compact25519) (public domain, bare-metal safe)
+- **Multi-threaded host** with producer/consumer frame queue
+- **iCESugar Pro FPGA** (iCE40UP5K) as the target open hardware platform
+
+Every video frame is hashed, signed, and timestamped inside the TEE. The private key never leaves the enclave. Dropped or tampered frames are cryptographically detectable.
+
+---
+
+## Architecture
+
+### Two-Thread Design
+
+```
+┌──────────────┐       ┌─────────────────┐       ┌──────────────────┐
+│ Capture      │       │  Frame Queue    │       │  Keystone        │
+│ Thread       │──────>│  (mutex/condvar)│──────>│  Enclave         │
+│              │ push  │  [16 slots]     │  pop  │                  │
+│ camera/test  │       │                 │ ocall │  Ed25519 sign    │
+│ frame hashes │       │                 │       │  loop forever    │
+└──────────────┘       └─────────────────┘       └──────────────────┘
+     HOST THREAD 1            SHARED              HOST THREAD 2 (main)
+                                                  runs enclave.run()
+```
+
+**Capture thread** produces frame hashes into a thread-safe queue. **Main thread** runs the Keystone enclave, whose ocall handlers pull frames from the queue. The enclave loops forever; the host destroys it when capture is done.
+
+### Enclave Flow
+
+1. **Init**: Request seed via ocall, derive Ed25519 keypair (`compact_ed25519_keygen`)
+2. **Publish**: Send public key to host via ocall
+3. **Sign loop** (runs forever):
+   - Request frame hash via ocall (blocks until queue has data)
+   - Build message: `hash(32) || sequence(8) || timestamp(8)`
+   - Sign with Ed25519 (`compact_ed25519_sign`)
+   - Return signature + metadata via ocall
+
+### Signed Frame Header
+
+```c
+typedef struct __attribute__((packed)) {
+    uint32_t magic;           // 0x5347464D ("SGFM")
+    uint32_t version;         // Protocol version (1)
+    uint32_t header_size;     // sizeof(SignedFrameHeader)
+    uint64_t sequence;        // Monotonically increasing frame number
+    uint64_t monotonic_ts;    // Timestamp (cycles via rdcycle)
+    uint8_t  frame_hash[32];  // SHA-256 of raw frame data
+    uint8_t  sig[64];         // Ed25519 signature
+    uint8_t  pubkey[32];      // Ed25519 public key
+    uint32_t width, height;   // Frame dimensions
+    uint32_t format;          // Pixel format
+    uint32_t frame_size;      // Raw frame size in bytes
+} SignedFrameHeader;
+```
 
 ---
 
@@ -13,168 +63,84 @@ Reference: https://forum.scrt.network/t/trusted-camera-attestation-on-open-hardw
 
 ```
 TEE-camera/
-├── Makefile                    # Top-level: setup / run / verify / sim
-├── scripts/
-│   ├── install_deps.sh         # Install system packages
-│   ├── setup_keystone.sh       # Clone + build Keystone from source
-│   └── qemu_boot_test.sh       # Boot SM in QEMU, validate output
-├── enclave/
-│   ├── common.h                # Shared types (host ↔ enclave)
-│   ├── enclave.c               # Frame signing eapp (Ed25519 + SHA-256)
-│   ├── tweetnacl.{h,c}         # TweetNaCl Ed25519 (no external deps)
-│   ├── sha256.{h,c}            # SHA-256 (no external deps)
-│   └── Makefile                # Cross-compile for RISC-V
-├── host/
-│   ├── host.cpp                # Keystone host: loads enclave, feeds frames
-│   └── Makefile
-├── verifier/
-│   ├── verifier.c              # Standalone x86 verifier
-│   └── Makefile
-├── litex/
-│   ├── icesugar_pro.py         # iCE40UP5K platform definition
-│   ├── soc.py                  # SoC: VexRiscv + SPRAM + PMP-aware DMA
-│   ├── sim.py                  # litex_sim simulation target
-│   └── Makefile
-└── keystone/
-    └── platform/litex/         # Keystone platform port for LiteX SoC
-        ├── platform.h
-        ├── platform.c
-        └── config.h
+├── Dockerfile.keystone         # Full Keystone + QEMU build environment
+├── Makefile                    # Top-level build orchestration
+│
+└── examples/frame-sign/        # Keystone SDK example (CMake-based)
+    ├── CMakeLists.txt          # Builds eapp + host, packages .ke
+    ├── app.lds                 # RISC-V linker script for enclave
+    ├── shared_mem.h            # Shared types (FrameRequest, SignatureResult)
+    │
+    ├── eapp/                   # Enclave application (bare-metal RISC-V)
+    │   ├── frame_sign.c        # Main enclave: init keypair, sign loop
+    │   ├── edge_wrapper.{c,h}  # Ocall wrappers (print, seed, frame, result)
+    │   ├── compact_ed25519.{c,h}  # Ed25519 API (compact25519)
+    │   ├── compact_wipe.{c,h}  # Secure memory wipe
+    │   └── c25519/             # Ed25519 internals (public domain)
+    │       ├── edsign.{c,h}    # Sign/verify
+    │       ├── ed25519.{c,h}   # Point operations
+    │       ├── f25519.{c,h}    # Field arithmetic GF(2^255-19)
+    │       ├── fprime.{c,h}    # Scalar arithmetic mod l
+    │       ├── sha512.{c,h}    # SHA-512 (used by Ed25519)
+    │       └── c25519.{c,h}    # Curve25519 base
+    │
+    └── host/                   # Host runner (Linux, C++)
+        ├── host.cpp            # Multi-threaded: capture thread + enclave
+        ├── edge_wrapper.{cpp,h}  # Ocall dispatch (Keystone edge API)
 ```
 
 ---
 
 ## Quick Start
 
-### 1. Install dependencies
+### Build & Test in Keystone QEMU
 
 ```bash
-./scripts/install_deps.sh
+# Build full Keystone environment + frame-sign example
+docker build -f Dockerfile.keystone -t tee-camera-keystone .
+
+# Enter the container
+docker run --rm -it tee-camera-keystone
+
+# Inside container: boot QEMU
+cd /keystone/build-generic64 && ./scripts/run-qemu.sh
+
+# Inside QEMU:
+insmod keystone-driver.ko
+./frame-sign.ke
 ```
-
-Installs: `qemu-system-riscv64`, `gcc-riscv64-linux-gnu`, `libssl-dev`, LiteX, Migen.
-
-### 2. Build Keystone
-
-```bash
-./scripts/setup_keystone.sh
-```
-
-Clones `https://github.com/keystone-enclave/keystone`, builds the Security Monitor,
-Eyrie runtime, and SDK. Runs a smoke-test in QEMU. Takes ~10 minutes.
-
-### 3. Sign frames in QEMU
-
-```bash
-make run
-# or with custom params:
-make run FRAMES=30 WIDTH=640 HEIGHT=480 FPS=30
-```
-
-Builds the enclave + host, boots Keystone in QEMU, generates synthetic frames,
-signs each one inside the enclave, writes `output/frames/frame_NNNNNN.sig`.
-
-### 4. Verify signed frames
-
-```bash
-make verify
-```
-
-Verifies all `.sig` files: Ed25519 signature, SHA-256 hash, sequence continuity,
-monotonic counter.
-
-### 5. Test gap detection
-
-```bash
-make test-gap
-```
-
-Runs `make run`, drops frame 5, re-runs verifier — confirms gap is caught.
-
-### 6. Simulate the LiteX SoC
-
-```bash
-make sim
-```
-
-Boots the iCE40UP5K SoC (VexRiscv + SPRAM + PMP-aware DMA) in `litex_sim`.
-The DMA controller refuses to write frames unless a valid PMP entry covers
-the destination — verified in simulation.
 
 ---
 
-## Architecture
+## Security Properties
 
-### Enclave (enclave/)
-
-The signing enclave runs inside Keystone's hardware-isolated TEE:
-
-1. **Key derivation**: at init, calls `sm_get_sealing_key()` to get an
-   enclave-specific secret, uses it as the Ed25519 seed.
-2. **Frame signing**: for each frame:
-   - SHA-256 hash the raw frame bytes
-   - Build message: `hash || sequence (LE u64) || monotonic_ts (LE u64)`
-   - Sign with Ed25519 private key
-   - Return `SignedFrame` struct via shared memory
-3. **No #ifdefs**: signing logic is identical between QEMU and real hardware.
-   Only the frame source changes (synthetic vs DMA).
-
-### PMP-Aware DMA Controller (litex/soc.py)
-
-The novel hardware contribution. Implemented in Migen RTL (not software):
-
-- Before any DMA write, the `PMPChecker` module evaluates all 8 PMP entries
-  against the destination address range.
-- A write is permitted only if a PMP entry with `L+A=NAPOT` (locked, enclave)
-  covers the entire destination range.
-- If no valid PMP entry covers the destination, `pmp_violation` is asserted
-  and the write does not occur.
-- This enforcement is in combinational/FSM logic — it cannot be bypassed by
-  software running on the CPU.
-
-### Signed Frame Format
-
-```c
-typedef struct {
-    uint64_t sequence;          // monotonically increasing, 0-based
-    uint64_t monotonic_ts;      // cycle counter at signing time
-    uint8_t  frame_hash[32];    // SHA-256 of raw frame bytes
-    uint8_t  sig[64];           // Ed25519 signature
-    uint8_t  pubkey[32];        // Ed25519 public key
-    uint32_t width, height;     // frame dimensions
-    uint32_t format;            // 0=rgb, 1=gray, 2=synthetic
-    uint32_t frame_size;        // bytes in this frame
-} SignedFrame;
-```
-
-### Verifier
-
-Standalone x86 binary, no Keystone dependency. Given a list of `.sig` files:
-- Verifies Ed25519 signature (message = hash || sequence || ts)
-- Checks sequence numbers are contiguous
-- Checks monotonic_ts is non-decreasing
-- Exits 0 on full pass, 1 on any failure
+- **Key isolation**: Ed25519 private key never leaves enclave memory (PMP-protected)
+- **Attestation chain**: Keystone SM attestation proves enclave identity
+- **Tamper evidence**: Hash binds signature to exact frame bytes
+- **Replay prevention**: Monotonic sequence + rdcycle timestamp
+- **Gap detection**: Missing sequence numbers reveal dropped/censored frames
 
 ---
 
-## Hardware Path (when iCESugar Pro arrives)
+## Hardware Target
 
-The only required change is in the host runner: replace the synthetic frame
-generator with a read from the PMOD camera DMA buffer. The enclave signing
-code is unchanged.
+**iCESugar Pro** (Lattice iCE40UP5K):
+- 5280 LUTs, 128KB SPRAM, 1Mb BRAM
+- Open toolchain (Yosys + nextpnr)
+- PMOD camera interface
 
-1. Synthesize the SoC: `make -C litex synth`
-2. Flash: `iceprog build/icesugar_pro.bin`
-3. Update host to read from DMA buffer instead of synthetic generator
-4. Run as before
+When the FPGA arrives, the capture thread replaces test frame generation with reads from the camera DMA buffer. The enclave signing code is identical.
 
 ---
 
-## Security Notes
+## Crypto
 
-- The Ed25519 private key never leaves the enclave's isolated memory.
-- Frame signing happens inside the TEE; the host only sees the signed struct.
-- The PMP-aware DMA prevents an attacker from redirecting camera DMA to
-  non-enclave memory, which would allow frame substitution.
-- Monotonic counter and sequence numbers prevent replay attacks.
-- Gaps in sequence numbers indicate dropped/censored frames.
+Uses [compact25519](https://github.com/DavyLandman/compact25519) by Davy Landman, based on [Daniel Beer's c25519](https://www.dlbeer.co.nz/oss/c25519.html). Both public domain (CC0).
+
+Designed for embedded/bare-metal: byte-level operations, no libc assumptions, no dynamic allocation. The full Ed25519 implementation is ~2000 lines across 12 files.
+
+---
+
+## License
+
+MIT

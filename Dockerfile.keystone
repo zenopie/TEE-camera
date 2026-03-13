@@ -1,0 +1,61 @@
+# Dockerfile.keystone - Keystone TEE build + frame-sign example
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+RUN apt-get update && apt-get install -y \
+    autoconf automake autotools-dev bc \
+    bison build-essential curl expat libexpat1-dev flex gawk gcc git \
+    gperf libgmp-dev libmpc-dev libmpfr-dev libtool texinfo tmux \
+    patchutils zlib1g-dev wget bzip2 patch vim-common lbzip2 python \
+    pkg-config libglib2.0-dev libpixman-1-dev libssl-dev screen \
+    device-tree-compiler expect makeself unzip cpio rsync cmake ninja-build p7zip-full \
+    openssh-client sshpass \
+    && apt-get update && apt-get install --reinstall ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /keystone
+
+# Clone and build Keystone
+RUN git clone https://github.com/keystone-enclave/keystone /keystone && \
+    cd /keystone && \
+    git submodule update --init --recursive
+
+ENV KEYSTONE_PLATFORM=generic
+ENV KEYSTONE_BITS=64
+
+RUN make -j$(nproc)
+
+# Paths from the Buildroot build
+ENV BUILDDIR=/keystone/build-generic64
+ENV BUILDROOT_HOST=${BUILDDIR}/buildroot.build/host
+ENV KEYSTONE_SDK_DIR=${BUILDROOT_HOST}/usr/share/keystone/sdk
+
+# Copy and build our frame-sign example
+COPY examples/frame-sign /work/frame-sign
+RUN mkdir -p /work/frame-sign/build && \
+    cd /work/frame-sign/build && \
+    cmake .. \
+      -DKEYSTONE_SDK_DIR=${KEYSTONE_SDK_DIR} \
+      -DCMAKE_C_COMPILER=${BUILDROOT_HOST}/bin/riscv64-buildroot-linux-gnu-gcc \
+      -DCMAKE_CXX_COMPILER=${BUILDROOT_HOST}/bin/riscv64-buildroot-linux-gnu-g++ && \
+    make -j$(nproc)
+
+# Package into .ke: find eyrie-rt and loader.bin from the Buildroot build,
+# then create a self-extracting archive with makeself
+RUN cd /work/frame-sign/build && \
+    EYRIE_RT=$(find ${BUILDDIR}/buildroot.build -name "eyrie-rt" -type f | head -1) && \
+    LOADER=$(find ${BUILDDIR}/buildroot.build -name "loader.bin" -type f | head -1) && \
+    echo "Found eyrie-rt: ${EYRIE_RT}" && \
+    echo "Found loader.bin: ${LOADER}" && \
+    cp ${EYRIE_RT} ${LOADER} . && \
+    makeself --noprogress . frame-sign.ke "frame-sign" \
+      ./frame-sign-runner frame-sign eyrie-rt loader.bin
+
+# Install into QEMU disk image via Buildroot overlay
+RUN mkdir -p ${BUILDDIR}/overlay/root && \
+    cp /work/frame-sign/build/frame-sign.ke ${BUILDDIR}/overlay/root/ && \
+    cd /keystone && make -j$(nproc)
+
+CMD ["/bin/bash"]
