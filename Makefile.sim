@@ -1,5 +1,5 @@
 # Makefile.sim — Verilog simulation targets
-.PHONY: sim-all sim-puf sim-fuzzy-extract sim-boot-keygen sim-sha512 sim-fe25519 sim-ed25519-point sim-ed25519-sign clean
+.PHONY: sim-all sim-puf sim-fuzzy-extract sim-boot-keygen sim-frame-hasher sim-sha512 sim-fe25519 sim-ed25519-point sim-ed25519-sign clean
 
 IVERILOG = iverilog
 VVP = vvp
@@ -14,7 +14,7 @@ ED25519_SRC = rtl/ed25519/fe25519.v \
               rtl/ed25519/ed25519_point.v \
               rtl/ed25519/ed25519_scalarmult.v
 
-sim-all: sim-puf sim-fuzzy-extract sim-sha512 sim-fe25519 sim-ed25519-point sim-boot-keygen
+sim-all: sim-puf sim-fuzzy-extract sim-sha512 sim-fe25519 sim-ed25519-point sim-boot-keygen sim-frame-hasher
 
 sim-puf:
 	@echo "=== Simulating PUF ==="
@@ -33,6 +33,12 @@ sim-boot-keygen:
 		$(SHA512_SRC) $(ED25519_SRC) \
 		rtl/boot_keygen.v sim/tb_boot_keygen.v
 	$(VVP) output/boot_keygen.vvp
+
+sim-frame-hasher:
+	@echo "=== Simulating Frame Hasher ==="
+	$(IVERILOG) $(SIM_FLAGS) -o output/frame_hasher.vvp \
+		$(SHA512_SRC) rtl/frame_hasher.v sim/tb_frame_hasher.v
+	$(VVP) output/frame_hasher.vvp
 
 sim-sha512:
 	@echo "=== Simulating SHA-512 ==="
