@@ -161,6 +161,11 @@ module frame_hasher (
 
                         if (acc_count == 7'd127) begin
                             // Block complete — feed to SHA-512
+                            // SHA-512 must be ready (82 cycles < 128 pixel cycles)
+                            `ifdef SIMULATION
+                            if (!sha_ready)
+                                $display("ERROR: SHA-512 not ready for new block at t=%0t", $time);
+                            `endif
                             sha_block  <= {acc_reg[1015:0], pixel_data};
                             sha_init   <= first_block;
                             sha_next   <= !first_block;
