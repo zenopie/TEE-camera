@@ -1,26 +1,7 @@
-# Git
 .git
 .gitignore
-
-# Build artifacts
 output/
-build/
-keystone/
-*.o
-*.eapp
-*.dis
-
-# Host-compiled binaries (must rebuild in container)
-tools/verify_frames
-tools/generate_test_frames
-tools/test_crypto
-host/target/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# macOS
+*.vvp
+*.vcd
 .DS_Store
+.vscode/

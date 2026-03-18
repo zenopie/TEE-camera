@@ -1,0 +1,18 @@
+# Dockerfile.sim — Verilog simulation environment
+# Uses Icarus Verilog for RTL simulation
+#
+# Build:  docker build -f Dockerfile.sim -t tee-camera-sim .
+# Run:    docker run --rm -v $(pwd)/output:/work/output tee-camera-sim
+
+FROM alpine:3.19
+
+RUN apk add --no-cache iverilog make
+
+WORKDIR /work
+COPY rtl/ /work/rtl/
+COPY sim/ /work/sim/
+COPY Makefile.sim /work/Makefile
+
+RUN mkdir -p /work/output
+
+CMD ["make", "sim-all"]
