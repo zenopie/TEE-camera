@@ -12,7 +12,7 @@
 #   make synth        — synthesize for iCE40UP5K (TODO)
 #   make prog         — program via iceprog (TODO)
 
-.PHONY: sim-build sim sim-puf sim-fuzzy-extract sim-boot-keygen sim-frame-hasher sim-sha512 sim-fe25519 sim-ed25519-point sim-ed25519-sign clean
+.PHONY: sim-build sim sim-puf sim-fuzzy-extract sim-boot-keygen sim-frame-hasher sim-uart sim-sha512 sim-fe25519 sim-ed25519-point sim-ed25519-sign clean
 
 OUTPUT := output
 
@@ -30,6 +30,10 @@ sim-puf: sim-build
 sim-fuzzy-extract: sim-build
 	@mkdir -p $(OUTPUT)
 	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-fuzzy-extract
+
+sim-uart: sim-build
+	@mkdir -p $(OUTPUT)
+	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-uart
 
 sim-frame-hasher: sim-build
 	@mkdir -p $(OUTPUT)
