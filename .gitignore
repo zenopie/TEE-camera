@@ -28,9 +28,15 @@ __pycache__/
 # FPGA build artifacts
 fpga/*.json
 
-# Host build/dist
+# Host build/dist/target
 host/build/
 host/dist/
+host/target/
+
+# Firmware build artifacts
+firmware/*.o
+firmware/*.elf
+firmware/*.dis
 
 # Forum draft
 forum_post.md
