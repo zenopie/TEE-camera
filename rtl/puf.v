@@ -1,4 +1,4 @@
-// puf.v — Ring Oscillator PUF for iCE40UP5K
+// puf.v — Ring Oscillator PUF for Lattice ECP5
 //
 // Based on stnolting/fpga_puf approach: single-inverter cells with
 // sequential measurement via shift register.
@@ -38,7 +38,7 @@ module puf #(
     localparam SETTLE_CYCLES = 8'd16;
 
     // --- PUF cell array ---
-    // In real hardware: each cell is an SB_LUT4 configured as inverter
+    // In real hardware: each cell is a LUT4 configured as inverter
     // with feedback. For simulation, we model the settled state.
 
     // Simulated PUF cell output (deterministic for simulation)
@@ -51,18 +51,18 @@ module puf #(
         assign cell_out = (cell_idx[0] ^ cell_idx[2] ^ cell_idx[4] ^ cell_idx[6]);
     `else
         // Real hardware: ring oscillator cell
-        // The SB_LUT4 instantiation prevents Yosys from optimizing it away
+        // The LUT4 instantiation prevents Yosys from optimizing it away
         (* keep *)
         wire ro_chain;
 
-        SB_LUT4 #(
-            .LUT_INIT(16'b0101_0101_0101_0101) // NOT gate
+        LUT4 #(
+            .INIT(16'b0101_0101_0101_0101) // NOT gate
         ) ro_lut (
-            .I0(ro_chain),
-            .I1(1'b0),
-            .I2(1'b0),
-            .I3(1'b0),
-            .O(ro_chain)
+            .A(ro_chain),
+            .B(1'b0),
+            .C(1'b0),
+            .D(1'b0),
+            .Z(ro_chain)
         );
 
         // Latch the oscillator state

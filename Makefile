@@ -1,63 +1,46 @@
 # TEE-camera — FPGA Camera Attestation
-# iCE40UP5K + Ring Oscillator PUF + Ed25519 hardware signing
-#
-# Simulation (Docker):
-#   make sim-build    — build simulation Docker image
-#   make sim          — run all RTL simulations
-#   make sim-sha512   — run SHA-512 simulation only
-#   make sim-fe25519  — run Ed25519 field arithmetic simulation only
-#   make sim-puf      — run PUF simulation only
-#
-# Synthesis (requires Yosys + nextpnr-ice40):
-#   make synth        — synthesize for iCE40UP5K (TODO)
-#   make prog         — program via iceprog (TODO)
-
-.PHONY: sim-build sim sim-puf sim-fuzzy-extract sim-boot-keygen sim-frame-hasher sim-uart sim-sha512 sim-fe25519 sim-ed25519-point sim-ed25519-sign clean
+# ECP5-25K (iCESugar-Pro) + PUF + Ed25519 signing + HDMI output
 
 OUTPUT := output
+TOOLCHAIN := source ~/tools/oss-cad-suite/environment
 
-sim-build:
-	docker build -f Dockerfile.sim -t tee-camera-sim .
+RTL := rtl/picorv32.v rtl/soc_top.v rtl/puf.v rtl/fuzzy_extract.v \
+       rtl/sha512/sha512_core.v rtl/sha512/sha512_k_constants.v rtl/sha512/sha512_w_mem.v \
+       rtl/frame_hasher.v rtl/uart_tx.v rtl/tmds_encoder.v rtl/hdmi_out.v \
+       rtl/framebuf.v rtl/fpga_top.v rtl/ov7670_init.v rtl/sccb_master.v
 
-sim: sim-build
+.PHONY: firmware synth pnr flash build host clean
+
+# Firmware
+firmware:
+	cd firmware && make && cp firmware.hex ..
+
+# Synthesis
+synth:
 	@mkdir -p $(OUTPUT)
-	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim
+	yosys -p "read_verilog $(RTL); synth_ecp5 -abc2 -top fpga_top -json $(OUTPUT)/soc.json" \
+		> $(OUTPUT)/synth_soc.log 2>&1
+	@grep -E 'LUT4|DP16KD|TRELLIS_FF' $(OUTPUT)/synth_soc.log | tail -3
 
-sim-puf: sim-build
-	@mkdir -p $(OUTPUT)
-	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-puf
+# Place & Route
+pnr: synth
+	nextpnr-ecp5 --25k --package CABGA256 --speed 6 \
+		--json $(OUTPUT)/soc.json --lpf fpga/icesugar_pro.lpf \
+		--textcfg $(OUTPUT)/soc.config --ignore-loops \
+		> $(OUTPUT)/pnr_soc.log 2>&1
+	ecppack $(OUTPUT)/soc.config --svf $(OUTPUT)/soc.svf
 
-sim-fuzzy-extract: sim-build
-	@mkdir -p $(OUTPUT)
-	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-fuzzy-extract
+# Flash to FPGA
+flash:
+	openocd -f fpga/cmsisdap.cfg \
+		-c "init; svf -tap ecp5.tap -quiet -progress $(OUTPUT)/soc.svf; exit;"
 
-sim-uart: sim-build
-	@mkdir -p $(OUTPUT)
-	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-uart
+# Full build + flash
+build: pnr flash
 
-sim-frame-hasher: sim-build
-	@mkdir -p $(OUTPUT)
-	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-frame-hasher
-
-sim-boot-keygen: sim-build
-	@mkdir -p $(OUTPUT)
-	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-boot-keygen
-
-sim-ed25519-sign: sim-build
-	@mkdir -p $(OUTPUT)
-	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-ed25519-sign
-
-sim-sha512: sim-build
-	@mkdir -p $(OUTPUT)
-	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-sha512
-
-sim-fe25519: sim-build
-	@mkdir -p $(OUTPUT)
-	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-fe25519
-
-sim-ed25519-point: sim-build
-	@mkdir -p $(OUTPUT)
-	docker run --rm -v $(PWD)/$(OUTPUT):/work/output tee-camera-sim make sim-ed25519-point
+# Host program
+host:
+	cd host && .venv/bin/python3 hdmi_host.py --device 0
 
 clean:
-	rm -rf $(OUTPUT)/*.vvp $(OUTPUT)/*.vcd
+	rm -rf $(OUTPUT)/*.json $(OUTPUT)/*.config $(OUTPUT)/*.svf $(OUTPUT)/*.log

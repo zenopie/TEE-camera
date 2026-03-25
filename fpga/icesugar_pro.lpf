@@ -1,0 +1,114 @@
+# ============================================================
+# iCESugar-Pro + Extension Board Pin Constraints
+# ECP5 LFE5U-25F-6BG256C
+# ============================================================
+
+# System clock — 25 MHz on-board oscillator
+LOCATE COMP "clk" SITE "P6";
+IOBUF  PORT "clk" IO_TYPE=LVCMOS33;
+FREQUENCY PORT "clk" 25 MHZ;
+
+# No physical reset button on iCESugar-Pro; reset generated in logic.
+
+# RGB LED (only LEDs on the module)
+LOCATE COMP "rgb_led[0]" SITE "A11";
+IOBUF  PORT "rgb_led[0]" IO_TYPE=LVCMOS33;
+LOCATE COMP "rgb_led[1]" SITE "A12";
+IOBUF  PORT "rgb_led[1]" IO_TYPE=LVCMOS33;
+LOCATE COMP "rgb_led[2]" SITE "B11";
+IOBUF  PORT "rgb_led[2]" IO_TYPE=LVCMOS33;
+
+# ============================================================
+# UART — via DAPLink USB CDC (B9=TX, A9=RX)
+# ============================================================
+LOCATE COMP "uart_txd" SITE "B9";
+IOBUF  PORT "uart_txd" IO_TYPE=LVCMOS33;
+LOCATE COMP "uart_rxd" SITE "A9";
+IOBUF  PORT "uart_rxd" IO_TYPE=LVCMOS33;
+
+# ============================================================
+# Camera DVP — Extension Board P2 Header (BGA256 pins)
+#
+# Camera 2x9 right-angle header maps to P2 as follows:
+#   P2 top:  SDA(F2) HS(D1) XCLK(C1) D6(B1) . . D4(B3) . D2(B4) D0(B5) PWDN(B6)
+#   P2 bot:  SCL(E1) VS(C2) PCLK(B2) D7(A2) . . D5(A3) . D3(A4) D1(A5) RST(A6)
+#   Power:   3V3→3U3(col6), GND→GND(col5)
+# ============================================================
+# SCL (I2C clock) — P2 bottom col 1
+LOCATE COMP "cam_sioc" SITE "E1";
+IOBUF  PORT "cam_sioc" IO_TYPE=LVCMOS33;
+
+# SDA (I2C data) — P2 top col 1
+LOCATE COMP "cam_siod" SITE "F2";
+IOBUF  PORT "cam_siod" IO_TYPE=LVCMOS33;
+
+# VSYNC — P2 bottom col 2
+LOCATE COMP "vsync" SITE "C2";
+IOBUF  PORT "vsync" IO_TYPE=LVCMOS33;
+
+# HREF — P2 top col 2
+LOCATE COMP "href" SITE "D1";
+IOBUF  PORT "href" IO_TYPE=LVCMOS33;
+
+# PCLK (pixel clock from camera) — P2 bottom col 3
+LOCATE COMP "pclk" SITE "B2";
+IOBUF  PORT "pclk" IO_TYPE=LVCMOS33;
+
+# XCLK (master clock to camera) — P2 top col 3
+LOCATE COMP "xclk" SITE "C1";
+IOBUF  PORT "xclk" IO_TYPE=LVCMOS33;
+
+# Pixel data D[7:0]
+LOCATE COMP "pixel_data[7]" SITE "A2";
+IOBUF  PORT "pixel_data[7]" IO_TYPE=LVCMOS33;
+LOCATE COMP "pixel_data[6]" SITE "B1";
+IOBUF  PORT "pixel_data[6]" IO_TYPE=LVCMOS33;
+LOCATE COMP "pixel_data[5]" SITE "A3";
+IOBUF  PORT "pixel_data[5]" IO_TYPE=LVCMOS33;
+LOCATE COMP "pixel_data[4]" SITE "B3";
+IOBUF  PORT "pixel_data[4]" IO_TYPE=LVCMOS33;
+LOCATE COMP "pixel_data[3]" SITE "A4";
+IOBUF  PORT "pixel_data[3]" IO_TYPE=LVCMOS33;
+LOCATE COMP "pixel_data[2]" SITE "B4";
+IOBUF  PORT "pixel_data[2]" IO_TYPE=LVCMOS33;
+LOCATE COMP "pixel_data[1]" SITE "A5";
+IOBUF  PORT "pixel_data[1]" IO_TYPE=LVCMOS33;
+LOCATE COMP "pixel_data[0]" SITE "B5";
+IOBUF  PORT "pixel_data[0]" IO_TYPE=LVCMOS33;
+
+# Camera RESET (active low) — P2 bottom col 11
+LOCATE COMP "cam_reset_n" SITE "A6";
+IOBUF  PORT "cam_reset_n" IO_TYPE=LVCMOS33;
+
+# Camera PWDN (active high, normally low) — P2 top col 11
+LOCATE COMP "cam_pwdn" SITE "B6";
+IOBUF  PORT "cam_pwdn" IO_TYPE=LVCMOS33;
+
+# ============================================================
+# HDMI — Pseudo-differential TMDS via LVCMOS33 GPIO pairs
+# Pin mapping for iCESugar-Pro CABGA256 (via SODIMM ext board)
+# Source: yodalee.me, ECP5_Brieysoc, icesugar-pro schematic
+# ============================================================
+# Blue (data0)
+LOCATE COMP "hdmi_p[0]" SITE "G1";
+IOBUF  PORT "hdmi_p[0]" IO_TYPE=LVCMOS33 DRIVE=4;
+LOCATE COMP "hdmi_n[0]" SITE "F1";
+IOBUF  PORT "hdmi_n[0]" IO_TYPE=LVCMOS33 DRIVE=4;
+
+# Green (data1)
+LOCATE COMP "hdmi_p[1]" SITE "J1";
+IOBUF  PORT "hdmi_p[1]" IO_TYPE=LVCMOS33 DRIVE=4;
+LOCATE COMP "hdmi_n[1]" SITE "H2";
+IOBUF  PORT "hdmi_n[1]" IO_TYPE=LVCMOS33 DRIVE=4;
+
+# Red (data2)
+LOCATE COMP "hdmi_p[2]" SITE "L1";
+IOBUF  PORT "hdmi_p[2]" IO_TYPE=LVCMOS33 DRIVE=4;
+LOCATE COMP "hdmi_n[2]" SITE "K2";
+IOBUF  PORT "hdmi_n[2]" IO_TYPE=LVCMOS33 DRIVE=4;
+
+# Clock
+LOCATE COMP "hdmi_p[3]" SITE "E2";
+IOBUF  PORT "hdmi_p[3]" IO_TYPE=LVCMOS33 DRIVE=4;
+LOCATE COMP "hdmi_n[3]" SITE "D3";
+IOBUF  PORT "hdmi_n[3]" IO_TYPE=LVCMOS33 DRIVE=4;

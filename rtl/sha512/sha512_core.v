@@ -44,10 +44,10 @@ module sha512_core(
 
                    input wire            init,
                    input wire            next,
-                   input wire [1 : 0]    mode,
+                   input wire [1 : 0]    mode,          // ignored, hardcoded to SHA-512
 
-                   input wire            work_factor,
-                   input wire [31 : 0]   work_factor_num,
+                   input wire            work_factor,   // ignored, hardcoded to 0
+                   input wire [31 : 0]   work_factor_num, // ignored
 
                    input wire [1023 : 0] block,
 
@@ -151,36 +151,24 @@ module sha512_core(
   reg           w_next;
   wire [63 : 0] w_data;
 
-  wire [63 : 0] H0_0;
-  wire [63 : 0] H0_1;
-  wire [63 : 0] H0_2;
-  wire [63 : 0] H0_3;
-  wire [63 : 0] H0_4;
-  wire [63 : 0] H0_5;
-  wire [63 : 0] H0_6;
-  wire [63 : 0] H0_7;
+  // SHA-512 initial hash values (mode 3 hardcoded)
+  wire [63 : 0] H0_0 = 64'h6a09e667f3bcc908;
+  wire [63 : 0] H0_1 = 64'hbb67ae8584caa73b;
+  wire [63 : 0] H0_2 = 64'h3c6ef372fe94f82b;
+  wire [63 : 0] H0_3 = 64'ha54ff53a5f1d36f1;
+  wire [63 : 0] H0_4 = 64'h510e527fade682d1;
+  wire [63 : 0] H0_5 = 64'h9b05688c2b3e6c1f;
+  wire [63 : 0] H0_6 = 64'h1f83d9abfb41bd6b;
+  wire [63 : 0] H0_7 = 64'h5be0cd19137e2179;
 
 
   //----------------------------------------------------------------
   // Module instantiantions.
   //----------------------------------------------------------------
   sha512_k_constants k_constants_inst(
-                                      .addr(round_ctr_reg),
+                                      .clk(clk),
+                                      .addr(round_ctr_new),
                                       .K(k_data)
-                                     );
-
-
-  sha512_h_constants h_constants_inst(
-                                      .mode(mode),
-
-                                      .H0(H0_0),
-                                      .H1(H0_1),
-                                      .H2(H0_2),
-                                      .H3(H0_3),
-                                      .H4(H0_4),
-                                      .H5(H0_5),
-                                      .H6(H0_6),
-                                      .H7(H0_7)
                                      );
 
 
@@ -537,37 +525,13 @@ module sha512_core(
 
         CTRL_DONE:
           begin
-            if (work_factor)
-              begin
-                if (work_factor_ctr_reg < work_factor_num)
-                  begin
-                    w_init              = 1'b1;
-                    state_init          = 1'b1;
-                    round_ctr_rst       = 1'b1;
-                    sha512_ctrl_new     = CTRL_ROUNDS;
-                    sha512_ctrl_we      = 1'b1;
-                  end
-                else
-                  begin
-                    ready_new        = 1'b1;
-                    ready_we         = 1'b1;
-                    digest_update    = 1'b1;
-                    digest_valid_new = 1'b1;
-                    digest_valid_we  = 1'b1;
-                    sha512_ctrl_new  = CTRL_IDLE;
-                    sha512_ctrl_we   = 1'b1;
-                  end
-              end
-            else
-              begin
-                ready_new        = 1'b1;
-                ready_we         = 1'b1;
-                digest_update    = 1'b1;
-                digest_valid_new = 1'b1;
-                digest_valid_we  = 1'b1;
-                sha512_ctrl_new  = CTRL_IDLE;
-                sha512_ctrl_we   = 1'b1;
-              end
+            ready_new        = 1'b1;
+            ready_we         = 1'b1;
+            digest_update    = 1'b1;
+            digest_valid_new = 1'b1;
+            digest_valid_we  = 1'b1;
+            sha512_ctrl_new  = CTRL_IDLE;
+            sha512_ctrl_we   = 1'b1;
           end
 
 

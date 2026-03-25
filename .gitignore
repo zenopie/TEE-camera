@@ -7,7 +7,6 @@ output/
 *.blif
 *.asc
 *.bin
-*.json
 
 # Editor
 .vscode/
@@ -15,5 +14,16 @@ output/
 *.swo
 *~
 
+# Compiled binaries
+test_crypto
+
+# Python
+host/.venv/
+__pycache__/
+*.pyc
+
 # macOS
 .DS_Store
+
+# Forum draft
+forum_post.md
