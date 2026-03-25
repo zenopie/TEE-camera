@@ -1,0 +1,12 @@
+[package]
+name = "tee-camera-host"
+version = "0.1.0"
+edition = "2021"
+description = "Host program for TEE-Camera FPGA attestation device"
+
+[dependencies]
+serialport = "4.5"
+ed25519-dalek = { version = "2", features = ["std"] }
+sha2 = "0.10"
+clap = { version = "4", features = ["derive"] }
+hex = "0.4"

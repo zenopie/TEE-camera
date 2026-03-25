@@ -1,0 +1,12 @@
+# Blink test — iCESugar-Pro ECP5 (RGB LED only)
+
+LOCATE COMP "clk" SITE "P6";
+IOBUF  PORT "clk" IO_TYPE=LVCMOS33;
+FREQUENCY PORT "clk" 25 MHZ;
+
+LOCATE COMP "rgb_led[0]" SITE "A11";
+IOBUF  PORT "rgb_led[0]" IO_TYPE=LVCMOS33;
+LOCATE COMP "rgb_led[1]" SITE "A12";
+IOBUF  PORT "rgb_led[1]" IO_TYPE=LVCMOS33;
+LOCATE COMP "rgb_led[2]" SITE "B11";
+IOBUF  PORT "rgb_led[2]" IO_TYPE=LVCMOS33;

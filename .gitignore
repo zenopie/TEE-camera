@@ -25,5 +25,12 @@ __pycache__/
 # macOS
 .DS_Store
 
+# FPGA build artifacts
+fpga/*.json
+
+# Host build/dist
+host/build/
+host/dist/
+
 # Forum draft
 forum_post.md
